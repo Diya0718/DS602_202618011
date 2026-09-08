@@ -35,10 +35,12 @@ with tab1:
 
     st.header("📊 Data Exploration")
 
+    # Dataset Preview
     st.subheader("Dataset Preview")
 
-    st.dataframe(df.head())
+    st.dataframe(df.head(), use_container_width=True)
 
+    # Dataset Information
     st.subheader("Dataset Information")
 
     col1, col2, col3 = st.columns(3)
@@ -51,6 +53,31 @@ with tab1:
 
     with col3:
         st.metric("Missing Values", df.isnull().sum().sum())
+
+    # --------------------------------------------------------
+    # Descriptive Statistics
+    # --------------------------------------------------------
+
+    st.subheader("Descriptive Statistics")
+
+    numerical_columns = df.select_dtypes(include="number").columns
+
+    descriptive_stats = pd.DataFrame({
+        "Mean": df[numerical_columns].mean(),
+        "Median": df[numerical_columns].median(),
+        "Standard Deviation": df[numerical_columns].std(),
+        "IQR": (
+            df[numerical_columns].quantile(0.75)
+            - df[numerical_columns].quantile(0.25)
+        ),
+        "Skewness": df[numerical_columns].skew(),
+        "Kurtosis": df[numerical_columns].kurtosis()
+    })
+
+    st.dataframe(
+        descriptive_stats.round(3),
+        use_container_width=True
+    )
 
 
 # ============================================================
