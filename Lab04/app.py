@@ -1690,11 +1690,7 @@ if len(significant_variables) > 0:
 # ========================================================
 
 with st.expander(
-<<<<<<< HEAD
-    "📐 View Regression Model Details" 
-=======
     "📐 View Regression Model Details"
->>>>>>> 1bfd5dcef7375d033fc83259c31832233fae4cf4
 ):
 
     st.write(
