@@ -80,7 +80,7 @@ st.markdown(
 # ============================================================
 
 df = pd.read_csv(
-    "D:\\DS602_202618011\\insurance.csv"
+    "D:\\Diya\\insurance.csv"
 )
 
 
@@ -547,770 +547,678 @@ with tab1:
 
 with tab2:
 
-    st.header(
-        "🧪 Hypothesis Testing Lab"
+    st.header("🧪 Hypothesis Testing Lab")
+    st.write(
+        "Select variables below to perform statistical hypothesis tests "
+        "interactively at α = 0.05."
     )
+
+    alpha = 0.05
+
+    # --------------------------------------------------------
+    # HYPOTHESIS TEST 1 — TWO GROUP COMPARISON
+    # --------------------------------------------------------
+
+    st.subheader("🔬 Hypothesis Test 1 — Compare Two Groups")
 
     st.write(
-        "Test whether medical charges differ "
-        "between different groups in the dataset."
+        "**Purpose:** Determine whether the selected numerical variable "
+        "differs significantly between two groups."
     )
 
+    categorical_columns = df.select_dtypes(
+        include=["object", "category"]
+    ).columns.tolist()
 
-    # ========================================================
-    # HYPOTHESIS TEST 1
-    # ========================================================
-
-    st.subheader(
-        "Hypothesis Test 1: Smokers vs Non-Smokers"
-    )
-
-    st.write(
-        "**Question:** Do smokers and non-smokers have "
-        "significantly different medical charges?"
-    )
-
-    st.write(
-        "**H₀:** There is no significant difference "
-        "in medical charges between smokers and non-smokers."
-    )
-
-    st.write(
-        "**H₁:** There is a significant difference "
-        "in medical charges between smokers and non-smokers."
-    )
-
-
-    # ========================================================
-    # GROUP STATISTICS
-    # ========================================================
-
-    smoker_charges = df[
-        df["smoker"] == "yes"
-    ]["charges"]
-
-    non_smoker_charges = df[
-        df["smoker"] == "no"
-    ]["charges"]
-
+    numerical_columns = df.select_dtypes(
+        include=["int64", "float64"]
+    ).columns.tolist()
 
     col1, col2 = st.columns(2)
 
     with col1:
+        ht1_category = st.selectbox(
+            "Select categorical factor",
+            categorical_columns,
+            key="ht1_category"
+        )
 
-        st.metric(
-            "Average Charges - Smokers",
-            f"${smoker_charges.mean():,.2f}"
+    with col2:
+        ht1_numeric = st.selectbox(
+            "Select numerical metric",
+            numerical_columns,
+            key="ht1_numeric"
+        )
+
+    # Find groups automatically
+    ht1_groups = df[ht1_category].dropna().unique().tolist()
+
+    if len(ht1_groups) >= 2:
+
+        group1 = ht1_groups[0]
+        group2 = ht1_groups[1]
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.info(f"**Group 1:** {group1}")
+
+        with col2:
+            st.info(f"**Group 2:** {group2}")
+
+        data1 = df[df[ht1_category] == group1][ht1_numeric].dropna()
+        data2 = df[df[ht1_category] == group2][ht1_numeric].dropna()
+
+        # Hypotheses
+        st.markdown("### Hypotheses")
+
+        st.write(
+            f"**H₀:** There is no significant difference in "
+            f"**{ht1_numeric}** between the two groups."
         )
 
         st.write(
-            f"Number of smokers: "
-            f"{len(smoker_charges)}"
+            f"**H₁:** There is a significant difference in "
+            f"**{ht1_numeric}** between the two groups."
         )
 
-    with col2:
+        # ----------------------------------------------------
+        # Shapiro-Wilk Normality Test
+        # ----------------------------------------------------
+
+        st.markdown("### 1️⃣ Shapiro-Wilk Normality Test")
+
+        shapiro1_stat, shapiro1_p = shapiro(data1)
+        shapiro2_stat, shapiro2_p = shapiro(data2)
+
+        normality_table = pd.DataFrame({
+            "Group": [str(group1), str(group2)],
+            "Statistic": [shapiro1_stat, shapiro2_stat],
+            "P-value": [shapiro1_p, shapiro2_p]
+        })
+
+        st.dataframe(
+            normality_table.style.format({
+                "Statistic": "{:.4f}",
+                "P-value": "{:.6g}"
+            }),
+            use_container_width=True
+        )
+
+        normal1 = shapiro1_p > alpha
+        normal2 = shapiro2_p > alpha
+
+        if normal1 and normal2:
+            st.success(
+                "Both groups are approximately normally distributed "
+                "(p > 0.05)."
+            )
+        else:
+            st.warning(
+                "At least one group is not normally distributed "
+                "(p ≤ 0.05)."
+            )
+
+        # ----------------------------------------------------
+        # Levene's Test
+        # ----------------------------------------------------
+
+        st.markdown("### 2️⃣ Levene's Test for Equal Variance")
+
+        levene_stat, levene_p = levene(data1, data2)
 
         st.metric(
-            "Average Charges - Non-Smokers",
-            f"${non_smoker_charges.mean():,.2f}"
+            "Levene p-value",
+            f"{levene_p:.6g}"
         )
+
+        equal_variance = levene_p > alpha
+
+        if equal_variance:
+            st.success(
+                "The variances can be considered equal (p > 0.05)."
+            )
+        else:
+            st.warning(
+                "The variances are significantly different (p ≤ 0.05)."
+            )
+
+        # ----------------------------------------------------
+        # Automatically Select Test
+        # ----------------------------------------------------
+
+        st.markdown("### 3️⃣ Final Statistical Test")
+
+        if normal1 and normal2:
+
+            # Both groups are normal → t-test
+            test_stat, test_p = ttest_ind(
+                data1,
+                data2,
+                equal_var=equal_variance
+            )
+
+            test_name = "Independent Two-Sample t-test"
+
+            st.info(
+                "Both groups are approximately normal, so an "
+                "**Independent Two-Sample t-test** is used."
+            )
+
+        else:
+
+            # At least one group is non-normal → Mann-Whitney
+            test_stat, test_p = mannwhitneyu(
+                data1,
+                data2,
+                alternative="two-sided"
+            )
+
+            test_name = "Mann-Whitney U test"
+
+            st.info(
+                "At least one group is non-normal, so the "
+                "**Mann-Whitney U test** is used."
+            )
+
+        # ----------------------------------------------------
+        # Test Results
+        # ----------------------------------------------------
+
+        result_col1, result_col2 = st.columns(2)
+
+        with result_col1:
+            st.metric(
+                "Test",
+                test_name
+            )
+
+        with result_col2:
+            st.metric(
+                "P-value",
+                f"{test_p:.6g}"
+            )
 
         st.write(
-            f"Number of non-smokers: "
-            f"{len(non_smoker_charges)}"
+            f"**Test Statistic:** {test_stat:.6f}"
         )
 
+        # ----------------------------------------------------
+        # Decision
+        # ----------------------------------------------------
 
-    # ========================================================
-    # SHAPIRO-WILK TEST
-    # ========================================================
+        if test_p < alpha:
 
-    st.subheader(
-        "Shapiro-Wilk Normality Test"
-    )
+            st.error(
+                "❌ **Decision: Reject H₀**"
+            )
 
-    smoker_stat, smoker_p = shapiro(
-        smoker_charges
-    )
+            st.write(
+                f"At α = {alpha}, there is statistically significant "
+                f"evidence that **{ht1_numeric} differs between "
+                f"{group1} and {group2}**."
+            )
 
-    non_smoker_stat, non_smoker_p = shapiro(
-        non_smoker_charges
-    )
+        else:
 
-    normality_results = pd.DataFrame({
+            st.success(
+                "✅ **Decision: Fail to Reject H₀**"
+            )
 
-        "Group": [
-            "Smokers",
-            "Non-Smokers"
-        ],
+            st.write(
+                f"At α = {alpha}, there is not enough evidence to conclude "
+                f"that **{ht1_numeric} differs between {group1} and {group2}**."
+            )
 
-        "Test Statistic": [
-            smoker_stat,
-            non_smoker_stat
-        ],
+        # ----------------------------------------------------
+        # Group Comparison Plot
+        # ----------------------------------------------------
 
-        "P-value": [
-            smoker_p,
-            non_smoker_p
-        ]
+        st.markdown("### 📊 Group Comparison")
 
-    })
+        fig, ax = plt.subplots(figsize=(8, 5))
 
-    st.dataframe(
-        normality_results,
-        use_container_width=True
-    )
-
-    st.write(
-        "If p-value < 0.05, reject H₀ and conclude "
-        "that the data is not normally distributed."
-    )
-
-
-    # ========================================================
-    # LEVENE'S TEST
-    # ========================================================
-
-    st.subheader(
-        "Levene's Test for Equal Variances"
-    )
-
-    levene_stat, levene_p = levene(
-        smoker_charges,
-        non_smoker_charges
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.metric(
-            "Levene Test Statistic",
-            f"{levene_stat:.4f}"
+        sns.boxplot(
+            data=df,
+            x=ht1_category,
+            y=ht1_numeric,
+            ax=ax
         )
 
-    with col2:
-
-        st.metric(
-            "P-value",
-            f"{levene_p:.4e}"
+        ax.set_title(
+            f"{ht1_numeric} by {ht1_category}"
         )
 
+        ax.set_xlabel(ht1_category)
+        ax.set_ylabel(ht1_numeric)
 
-    if levene_p < 0.05:
+        plt.xticks(rotation=20)
 
-        st.error(
-            "Reject H₀: The variances of the two groups "
-            "are significantly different."
-        )
+        st.pyplot(fig)
+
+        plt.close(fig)
 
     else:
 
-        st.success(
-            "Fail to reject H₀: There is no significant "
-            "difference in the variances."
+        st.warning(
+            "The selected categorical variable must contain at least "
+            "two groups for Hypothesis Test 1."
         )
-
-
-    # ========================================================
-    # MANN-WHITNEY U TEST
-    # ========================================================
-
-    st.subheader(
-        "Mann-Whitney U Test"
-    )
-
-    st.write(
-        "Since the data is not normally distributed and "
-        "the group variances are significantly different, "
-        "the Mann-Whitney U test is used."
-    )
-
-    u_stat, mann_p = mannwhitneyu(
-        smoker_charges,
-        non_smoker_charges,
-        alternative="two-sided"
-    )
-
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.metric(
-            "Mann-Whitney U Statistic",
-            f"{u_stat:.2f}"
-        )
-
-    with col2:
-
-        st.metric(
-            "P-value",
-            f"{mann_p:.4e}"
-        )
-
-
-    # ========================================================
-    # FINAL CONCLUSION
-    # ========================================================
-
-    if mann_p < 0.05:
-
-        st.error(
-            "Reject H₀: There is a statistically significant "
-            "difference in medical charges between smokers "
-            "and non-smokers."
-        )
-
-    else:
-
-        st.success(
-            "Fail to reject H₀: There is no statistically "
-            "significant difference in medical charges between "
-            "smokers and non-smokers."
-        )
-
-
-    # ========================================================
-    # SMOKER BOX PLOT
-    # ========================================================
-
-    st.subheader(
-        "Medical Charges by Smoking Status"
-    )
-
-    fig, ax = plt.subplots(
-        figsize=(9, 5)
-    )
-
-    sns.boxplot(
-        data=df,
-        x="smoker",
-        y="charges",
-        ax=ax
-    )
-
-    ax.set_title(
-        "Medical Charges: Smokers vs Non-Smokers",
-        fontsize=15,
-        pad=15
-    )
-
-    ax.set_xlabel(
-        "Smoking Status",
-        fontsize=11
-    )
-
-    ax.set_ylabel(
-        "Medical Charges ($)",
-        fontsize=11
-    )
-
-    ax.set_xticks(
-        [0, 1]
-    )
-
-    ax.set_xticklabels(
-        [
-            "Non-Smoker",
-            "Smoker"
-        ]
-    )
-
-    ax.tick_params(
-        axis="both",
-        labelsize=10
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(fig)
-
-    plt.close(fig)
-
 
     # ========================================================
     # HYPOTHESIS TEST 2 — ONE-WAY ANOVA
     # ========================================================
 
-    st.subheader(
-        "Hypothesis Test 2: Charges Across Regions"
-    )
+    st.divider()
+
+    st.subheader("📈 Hypothesis Test 2 — One-Way ANOVA")
 
     st.write(
-        "**Question:** Do medical charges differ significantly "
-        "across the four regions?"
+        "**Purpose:** Determine whether the selected numerical variable "
+        "differs significantly across three or more groups."
     )
-
-    st.write(
-        "**H₀:** The mean medical charges are equal across "
-        "all four regions."
-    )
-
-    st.write(
-        "**H₁:** At least one region has a different mean "
-        "medical charge."
-    )
-
-
-    # ========================================================
-    # REGION GROUPS
-    # ========================================================
-
-    northeast = df[
-        df["region"] == "northeast"
-    ]["charges"]
-
-    northwest = df[
-        df["region"] == "northwest"
-    ]["charges"]
-
-    southeast = df[
-        df["region"] == "southeast"
-    ]["charges"]
-
-    southwest = df[
-        df["region"] == "southwest"
-    ]["charges"]
-
-
-    # ========================================================
-    # ONE-WAY ANOVA
-    # ========================================================
-
-    f_stat, anova_p = f_oneway(
-        northeast,
-        northwest,
-        southeast,
-        southwest
-    )
-
-
-    # ========================================================
-    # DISPLAY ANOVA RESULTS
-    # ========================================================
 
     col1, col2 = st.columns(2)
 
     with col1:
-
-        st.metric(
-            "F-Statistic",
-            f"{f_stat:.4f}"
+        ht2_category = st.text_input(
+            "Categorical factor",
+            value="region",
+            disabled=True
         )
+        
 
     with col2:
-
-        st.metric(
-            "P-value",
-            f"{anova_p:.4e}"
+        ht2_numeric = st.selectbox(
+            "Select numerical metric",
+            numerical_columns,
+            key="ht2_numeric"
         )
 
+    # Get groups
+    ht2_groups = df[ht2_category].dropna().unique().tolist()
 
-    # ========================================================
-    # ANOVA CONCLUSION
-    # ========================================================
+    if len(ht2_groups) >= 3:
 
-    if anova_p < 0.05:
+        # Create groups for ANOVA
+        anova_groups = []
 
-        st.error(
-            "Reject H₀: There is a statistically significant "
-            "difference in medical charges across the regions."
-        )
+        valid_group_names = []
+
+        for group in ht2_groups:
+
+            group_data = df[
+                df[ht2_category] == group
+            ][ht2_numeric].dropna()
+
+            if len(group_data) > 1:
+
+                anova_groups.append(group_data)
+                valid_group_names.append(group)
+
+        if len(anova_groups) >= 3:
+
+            # ------------------------------------------------
+            # Hypotheses
+            # ------------------------------------------------
+
+            st.markdown("### Hypotheses")
+
+            st.write(
+                f"**H₀:** The mean **{ht2_numeric}** is equal "
+                f"across all groups of **{ht2_category}**."
+            )
+
+            st.write(
+                f"**H₁:** At least one group has a different mean "
+                f"**{ht2_numeric}**."
+            )
+
+            # ------------------------------------------------
+            # ANOVA
+            # ------------------------------------------------
+
+            f_stat, anova_p = f_oneway(*anova_groups)
+
+            result_col1, result_col2 = st.columns(2)
+
+            with result_col1:
+                st.metric(
+                    "F-statistic",
+                    f"{f_stat:.6f}"
+                )
+
+            with result_col2:
+                st.metric(
+                    "P-value",
+                    f"{anova_p:.6g}"
+                )
+
+            # ------------------------------------------------
+            # Decision
+            # ------------------------------------------------
+
+            if anova_p < alpha:
+
+                st.error(
+                    "❌ **Decision: Reject H₀**"
+                )
+
+                st.write(
+                    f"At α = {alpha}, there is statistically significant "
+                    f"evidence that the mean **{ht2_numeric}** is not the "
+                    f"same across all **{ht2_category}** groups."
+                )
+
+            else:
+
+                st.success(
+                    "✅ **Decision: Fail to Reject H₀**"
+                )
+
+                st.write(
+                    f"At α = {alpha}, there is not enough evidence to "
+                    f"conclude that the mean **{ht2_numeric}** differs "
+                    f"across the **{ht2_category}** groups."
+                )
+
+            # ------------------------------------------------
+            # Group Means
+            # ------------------------------------------------
+
+            st.markdown("### 📊 Group Means")
+
+            group_means = (
+                df.groupby(ht2_category)[ht2_numeric]
+                .agg(["mean", "count"])
+                .reset_index()
+            )
+
+            group_means.columns = [
+                ht2_category,
+                "Mean",
+                "Count"
+            ]
+
+            st.dataframe(
+                group_means.style.format({
+                    "Mean": "{:.2f}",
+                    "Count": "{:.0f}"
+                }),
+                use_container_width=True
+            )
+
+            # ------------------------------------------------
+            # ANOVA Boxplot
+            # ------------------------------------------------
+
+            st.markdown("### 📦 Distribution Across Groups")
+
+            fig, ax = plt.subplots(figsize=(9, 5))
+
+            sns.boxplot(
+                data=df,
+                x=ht2_category,
+                y=ht2_numeric,
+                ax=ax
+            )
+
+            ax.set_title(
+                f"{ht2_numeric} by {ht2_category}"
+            )
+
+            ax.set_xlabel(ht2_category)
+            ax.set_ylabel(ht2_numeric)
+
+            plt.xticks(rotation=20)
+
+            st.pyplot(fig)
+
+            plt.close(fig)
+
+        else:
+
+            st.warning(
+                "At least three groups with sufficient observations "
+                "are required for ANOVA."
+            )
 
     else:
 
-        st.success(
-            "Fail to reject H₀: There is no statistically "
-            "significant difference in medical charges across "
-            "the regions."
+        st.warning(
+            "The selected categorical variable must contain at least "
+            "three groups for One-Way ANOVA."
         )
 
 
-    # ========================================================
-    # REGION BOX PLOT
-    # ========================================================
-
-    st.subheader(
-        "Medical Charges by Region"
-    )
-
-    fig, ax = plt.subplots(
-        figsize=(9, 5)
-    )
-
-    sns.boxplot(
-        data=df,
-        x="region",
-        y="charges",
-        ax=ax
-    )
-
-    ax.set_title(
-        "Distribution of Medical Charges by Region",
-        fontsize=15,
-        pad=15
-    )
-
-    ax.set_xlabel(
-        "Region",
-        fontsize=11
-    )
-
-    ax.set_ylabel(
-        "Medical Charges ($)",
-        fontsize=11
-    )
-
-    ax.tick_params(
-        axis="both",
-        labelsize=10
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(fig)
-
-    plt.close(fig)
-
-
 # ============================================================
-# TAB 3 — LIVE PREDICTION & DIAGNOSTICS
+# TAB 3: LIVE PREDICTION & DIAGNOSTICS
 # ============================================================
 
 with tab3:
 
-    st.header(
-        "🔮 Live Prediction & Diagnostics"
-    )
-
+    st.header("📈 Live Prediction & Diagnostics")
     st.write(
-        "Enter the patient's details below to estimate "
-        "medical insurance charges."
+        "Enter patient information below to predict medical insurance "
+        "charges and examine the regression model diagnostics."
     )
 
-
     # ========================================================
-    # LIVE PREDICTION
+    # SECTION 1: LIVE PREDICTION
     # ========================================================
 
-    st.subheader(
-        "Predict Medical Charges"
-    )
+    st.subheader("🔮 Live Medical Charge Prediction")
 
-    col1, col2 = st.columns(2)
-
-
-    # --------------------------------------------------------
-    # LEFT COLUMN
-    # --------------------------------------------------------
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-
-        age = st.number_input(
+        pred_age = st.slider(
             "Age",
-            min_value=18,
-            max_value=100,
+            min_value=int(df["age"].min()),
+            max_value=int(df["age"].max()),
             value=30
         )
 
-        weight = st.number_input(
-            "Weight (kg)",
-            min_value=20.0,
-            max_value=300.0,
-            value=60.0
+        pred_sex = st.selectbox(
+            "Sex",
+            sorted(df["sex"].unique())
         )
 
-        height = st.number_input(
-            "Height (cm)",
-            min_value=100.0,
-            max_value=250.0,
-            value=165.0
-        )
-
-
-        # ----------------------------------------------------
-        # Calculate BMI automatically
-        # ----------------------------------------------------
-
-        height_m = height / 100
-
-        bmi = weight / (
-            height_m ** 2
-        )
-
-        st.info(
-            f"Calculated BMI: **{bmi:.2f} kg/m²**"
-        )
-
-
-        children = st.number_input(
-            "Number of Children",
-            min_value=0,
-            max_value=10,
+        pred_children = st.slider(
+            "Number of children",
+            min_value=int(df["children"].min()),
+            max_value=int(df["children"].max()),
             value=0
         )
 
-
-    # --------------------------------------------------------
-    # RIGHT COLUMN
-    # --------------------------------------------------------
-
     with col2:
-
-        sex = st.selectbox(
-            "Sex",
-            [
-                "female",
-                "male"
-            ]
+        pred_weight = st.number_input(
+            "Weight (kg)",
+            min_value=20.0,
+            max_value=200.0,
+            value=65.0,
+            step=1.0
         )
 
-        smoker = st.selectbox(
+        pred_height = st.number_input(
+            "Height (cm)",
+            min_value=100.0,
+            max_value=220.0,
+            value=165.0,
+            step=1.0
+        )
+
+        # Calculate BMI
+        height_m = pred_height / 100
+        pred_bmi = pred_weight / (height_m ** 2)
+
+        st.metric(
+            "Calculated BMI",
+            f"{pred_bmi:.2f}"
+        )
+
+    with col3:
+        pred_smoker = st.selectbox(
             "Smoker",
-            [
-                "no",
-                "yes"
-            ]
+            sorted(df["smoker"].unique())
         )
 
-        region = st.selectbox(
+        pred_region = st.selectbox(
             "Region",
-            [
-                "northeast",
-                "northwest",
-                "southeast",
-                "southwest"
-            ]
+            sorted(df["region"].unique())
         )
-
 
     # ========================================================
-    # PREDICTION BUTTON
+    # CREATE INPUT DATA FOR MODEL
     # ========================================================
 
-    if st.button(
-        "⚡ Predict Charges",
-        type="primary"
-    ):
+    input_data = pd.DataFrame({
+        "age": [pred_age],
+        "bmi": [pred_bmi],
+        "children": [pred_children],
+        "sex": [pred_sex],
+        "smoker": [pred_smoker],
+        "region": [pred_region]
+    })
 
+    # Convert categorical variables into dummy variables
+    input_data = pd.get_dummies(
+        input_data,
+        drop_first=True
+    )
 
-        # ----------------------------------------------------
-        # Create input dataframe
-        # ----------------------------------------------------
+    # Make sure input columns match the training model
+    feature_columns = X.columns.drop("const")
 
-        input_data = pd.DataFrame({
+    input_data = input_data.reindex(
+        columns=feature_columns,
+        fill_value=0
+    )
 
-            "age": [age],
+    # Add constant
+    input_data = sm.add_constant(
+        input_data,
+        has_constant="add"
+    )
 
-            "bmi": [bmi],
-
-            "children": [children],
-
-            "sex": [sex],
-
-            "smoker": [smoker],
-
-            "region": [region]
-
-        })
-
-
-        # ----------------------------------------------------
-        # Convert categorical variables into dummy variables
-        # ----------------------------------------------------
-
-        input_data = pd.get_dummies(
-            input_data,
-            drop_first=True
-        )
-
-
-        # ----------------------------------------------------
-        # Match training columns
-        # ----------------------------------------------------
-
-        feature_columns = X.columns.drop(
-            "const"
-        )
-
-        input_data = input_data.reindex(
-            columns=feature_columns,
-            fill_value=0
-        )
-
-
-        # ----------------------------------------------------
-        # Add intercept
-        # ----------------------------------------------------
-
-        input_data = sm.add_constant(
-            input_data,
-            has_constant="add"
-        )
-
-
-        # ----------------------------------------------------
-        # Ensure exact same column order
-        # ----------------------------------------------------
-
-        input_data = input_data[
-            X.columns
-        ]
-
-
-        # ====================================================
-        # PREDICTION + CONFIDENCE INTERVALS
-        # ====================================================
-
-        prediction_result = model.get_prediction(
-            input_data
-        )
-
-        prediction_summary = prediction_result.summary_frame(
-            alpha=0.05
-        )
-
-
-        # ----------------------------------------------------
-        # Extract values
-        # ----------------------------------------------------
-
-        predicted_charge = prediction_summary[
-            "mean"
-        ].iloc[0]
-
-        confidence_lower = prediction_summary[
-            "mean_ci_lower"
-        ].iloc[0]
-
-        confidence_upper = prediction_summary[
-            "mean_ci_upper"
-        ].iloc[0]
-
-        prediction_lower = prediction_summary[
-            "obs_ci_lower"
-        ].iloc[0]
-
-        prediction_upper = prediction_summary[
-            "obs_ci_upper"
-        ].iloc[0]
-
-
-        # ====================================================
-        # DISPLAY PREDICTION
-        # ====================================================
-
-        st.success(
-            f"### Estimated Medical Charges: "
-            f"${predicted_charge:,.2f}"
-        )
-
-
-        # ====================================================
-        # CONFIDENCE INTERVAL
-        # ====================================================
-
-        st.subheader(
-            "95% Confidence Interval"
-        )
-
-        st.write(
-            "This interval estimates the range in which the "
-            "average medical charge for patients with these "
-            "characteristics is expected to lie."
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.metric(
-                "Lower Bound",
-                f"${confidence_lower:,.2f}"
-            )
-
-        with col2:
-
-            st.metric(
-                "Upper Bound",
-                f"${confidence_upper:,.2f}"
-            )
-
-
-        # ====================================================
-        # PREDICTION INTERVAL
-        # ====================================================
-
-        st.subheader(
-            "95% Prediction Interval"
-        )
-
-        st.write(
-            "This interval gives a wider range for the medical "
-            "charge of an individual patient with these "
-            "characteristics."
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.metric(
-                "Lower Bound",
-                f"${prediction_lower:,.2f}"
-            )
-
-        with col2:
-
-            st.metric(
-                "Upper Bound",
-                f"${prediction_upper:,.2f}"
-            )
-
+    # Ensure exact same column order as training data
+    input_data = input_data[X.columns]
 
     # ========================================================
-    # MODEL DIAGNOSTICS
+    # PREDICTION
+    # ========================================================
+
+    prediction_result = model.get_prediction(input_data)
+
+    prediction_summary = prediction_result.summary_frame(
+        alpha=0.05
+    )
+
+    predicted_charge = prediction_summary["mean"].iloc[0]
+
+    confidence_lower = prediction_summary["mean_ci_lower"].iloc[0]
+    confidence_upper = prediction_summary["mean_ci_upper"].iloc[0]
+
+    prediction_lower = prediction_summary["obs_ci_lower"].iloc[0]
+    prediction_upper = prediction_summary["obs_ci_upper"].iloc[0]
+
+    # ========================================================
+    # DISPLAY PREDICTION
     # ========================================================
 
     st.divider()
 
-    st.header(
-        "📊 Model Diagnostics"
+    st.subheader("💰 Predicted Insurance Charge")
+
+    st.metric(
+        "Predicted Medical Charge",
+        f"${predicted_charge:,.2f}"
     )
 
-    st.write(
-        "Diagnostic plots and statistical tests used to "
-        "evaluate the assumptions of the OLS regression model."
-    )
+    col1, col2 = st.columns(2)
 
+    with col1:
+        st.info(
+            f"""
+            **95% Confidence Interval**
+
+            ${confidence_lower:,.2f} to ${confidence_upper:,.2f}
+
+            This interval estimates the uncertainty around the
+            **mean predicted charge** for patients with these characteristics.
+            """
+        )
+
+    with col2:
+        st.warning(
+            f"""
+            **95% Prediction Interval**
+
+            ${prediction_lower:,.2f} to ${prediction_upper:,.2f}
+
+            This wider interval represents the expected range for an
+            **individual patient's actual charge**.
+            """
+        )
 
     # ========================================================
-    # RESIDUALS
+    # PATIENT INPUT SUMMARY
     # ========================================================
+
+    with st.expander("📋 View Patient Input"):
+
+        patient_summary = pd.DataFrame({
+            "Variable": [
+                "Age",
+                "Sex",
+                "Weight",
+                "Height",
+                "BMI",
+                "Children",
+                "Smoker",
+                "Region"
+            ],
+            "Value": [
+                pred_age,
+                pred_sex,
+                f"{pred_weight:.1f} kg",
+                f"{pred_height:.1f} cm",
+                f"{pred_bmi:.2f}",
+                pred_children,
+                pred_smoker,
+                pred_region
+            ]
+        })
+
+        st.dataframe(
+            patient_summary,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    # ========================================================
+    # SECTION 2: RESIDUAL DIAGNOSTICS
+    # ========================================================
+
+    st.divider()
+
+    st.subheader("🧪 Regression Diagnostics")
 
     residuals = model.resid
-
     fitted_values = model.fittedvalues
 
+    # --------------------------------------------------------
+    # Residuals vs Fitted
+    # --------------------------------------------------------
 
-    # ========================================================
-    # RESIDUAL VS FITTED PLOT
-    # ========================================================
+    st.markdown("### 1. Residuals vs Fitted Values")
 
-    st.subheader(
-        "Residuals vs Fitted Values"
-    )
-
-    fig, ax = plt.subplots(
-        figsize=(9, 5)
-    )
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     sns.scatterplot(
         x=fitted_values,
         y=residuals,
-        alpha=0.6,
-        s=45,
+        alpha=0.5,
         ax=ax
     )
 
@@ -1319,46 +1227,27 @@ with tab3:
         linestyle="--"
     )
 
-    ax.set_xlabel(
-        "Fitted Values",
-        fontsize=11
-    )
-
-    ax.set_ylabel(
-        "Residuals",
-        fontsize=11
-    )
-
-    ax.set_title(
-        "Residuals vs Fitted Values",
-        fontsize=15,
-        pad=15
-    )
-
-    plt.tight_layout()
+    ax.set_xlabel("Fitted Values")
+    ax.set_ylabel("Residuals")
+    ax.set_title("Residuals vs Fitted Values")
 
     st.pyplot(fig)
 
     plt.close(fig)
 
-
     st.write(
-        "A good residual plot should show points randomly "
-        "scattered around zero without a clear pattern."
+        "A random scatter around zero supports the linearity and "
+        "constant-variance assumptions. A visible pattern or funnel "
+        "shape may indicate model problems."
     )
 
+    # --------------------------------------------------------
+    # Q-Q Plot
+    # --------------------------------------------------------
 
-    # ========================================================
-    # Q-Q PLOT
-    # ========================================================
+    st.markdown("### 2. Q-Q Plot")
 
-    st.subheader(
-        "Q-Q Plot of Residuals"
-    )
-
-    fig, ax = plt.subplots(
-        figsize=(8, 6)
-    )
+    fig, ax = plt.subplots(figsize=(7, 5))
 
     sm.qqplot(
         residuals,
@@ -1366,349 +1255,285 @@ with tab3:
         ax=ax
     )
 
-    ax.set_title(
-        "Normal Q-Q Plot",
-        fontsize=15,
-        pad=15
-    )
-
-    plt.tight_layout()
+    ax.set_title("Normal Q-Q Plot of Residuals")
 
     st.pyplot(fig)
 
     plt.close(fig)
 
-
     st.write(
-        "If the points approximately follow the diagonal "
-        "line, the residuals are closer to normally distributed."
+        "Points approximately following the diagonal line indicate "
+        "that the residuals are reasonably close to normally distributed."
     )
-
 
     # ========================================================
     # JARQUE-BERA TEST
     # ========================================================
 
-    st.subheader(
-        "Jarque-Bera Normality Test"
+    st.markdown("### 3. Jarque–Bera Normality Test")
+
+    jb_stat, jb_pvalue, skewness, kurtosis = sm.stats.jarque_bera(
+        residuals
     )
 
-    jb_stat, jb_pvalue, skewness, kurtosis = (
-        sm.stats.jarque_bera(
-            residuals
-        )
-    )
-
-
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-
         st.metric(
-            "Jarque-Bera Statistic",
+            "JB Statistic",
             f"{jb_stat:.4f}"
         )
 
     with col2:
-
         st.metric(
-            "P-value",
+            "p-value",
             f"{jb_pvalue:.4e}"
         )
 
+    with col3:
+        st.metric(
+            "Skewness",
+            f"{skewness:.4f}"
+        )
+
+    with col4:
+        st.metric(
+            "Kurtosis",
+            f"{kurtosis:.4f}"
+        )
 
     if jb_pvalue < 0.05:
-
         st.warning(
-            "Reject H₀: The residuals are not normally distributed."
+            "Reject H₀: the residuals are not normally distributed "
+            "at the 5% significance level."
         )
-
     else:
-
         st.success(
-            "Fail to reject H₀: There is no significant evidence "
-            "against normality of the residuals."
+            "Fail to reject H₀: there is insufficient evidence "
+            "that the residuals are non-normal."
         )
-
 
     # ========================================================
     # BREUSCH-PAGAN TEST
     # ========================================================
 
-    st.subheader(
-        "Breusch-Pagan Test for Heteroscedasticity"
+    st.markdown("### 4. Breusch–Pagan Test for Heteroscedasticity")
+
+    bp_test = het_breuschpagan(
+        residuals,
+        model.model.exog
     )
 
-    bp_lm, bp_lm_pvalue, bp_fvalue, bp_f_pvalue = (
-        het_breuschpagan(
-            residuals,
-            model.model.exog
-        )
-    )
+    bp_lm_stat = bp_test[0]
+    bp_lm_pvalue = bp_test[1]
+    bp_f_stat = bp_test[2]
+    bp_f_pvalue = bp_test[3]
 
-
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-
         st.metric(
             "LM Statistic",
-            f"{bp_lm:.4f}"
+            f"{bp_lm_stat:.4f}"
         )
 
     with col2:
-
         st.metric(
-            "P-value",
+            "LM p-value",
             f"{bp_lm_pvalue:.4e}"
         )
 
+    with col3:
+        st.metric(
+            "F Statistic",
+            f"{bp_f_stat:.4f}"
+        )
+
+    with col4:
+        st.metric(
+            "F p-value",
+            f"{bp_f_pvalue:.4e}"
+        )
 
     if bp_lm_pvalue < 0.05:
-
         st.warning(
-            "Reject H₀: Significant heteroscedasticity "
-            "is present in the residuals."
+            "Reject H₀: significant heteroscedasticity is detected. "
+            "The residual variance is not constant."
         )
-
     else:
-
         st.success(
-            "Fail to reject H₀: There is no significant "
-            "evidence of heteroscedasticity."
+            "Fail to reject H₀: there is insufficient evidence "
+            "of heteroscedasticity."
         )
-
 
     # ========================================================
     # VIF
     # ========================================================
 
-    st.subheader(
-        "Variance Inflation Factor (VIF)"
-    )
-
-    st.write(
-        "VIF is used to detect multicollinearity among "
-        "the explanatory variables."
-    )
-
+    st.markdown("### 5. Variance Inflation Factor (VIF)")
 
     X_vif = X.drop(
         columns=["const"]
     )
 
+    vif_data = pd.DataFrame()
 
-    vif_data = pd.DataFrame({
+    vif_data["Feature"] = X_vif.columns
 
-        "Variable":
-            X_vif.columns,
-
-        "VIF":
-            [
-                variance_inflation_factor(
-                    X_vif.values,
-                    i
-                )
-                for i in range(
-                    X_vif.shape[1]
-                )
-            ]
-
-    })
-
+    vif_data["VIF"] = [
+        variance_inflation_factor(
+            X_vif.values,
+            i
+        )
+        for i in range(X_vif.shape[1])
+    ]
 
     st.dataframe(
-        vif_data.round(3),
+        vif_data,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.write(
+        "VIF values close to 1 indicate little multicollinearity. "
+        "Higher values indicate stronger correlation among predictors."
+    )
+
+    # ========================================================
+    # SECTION 3: MODEL PERFORMANCE
+    # ========================================================
+
+    st.divider()
+
+    st.subheader("📊 Multiple Linear Regression Results")
+
+    # --------------------------------------------------------
+    # Model metrics
+    # --------------------------------------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "R²",
+            f"{model.rsquared:.3f}"
+        )
+
+    with col2:
+        st.metric(
+            "Adjusted R²",
+            f"{model.rsquared_adj:.3f}"
+        )
+
+    with col3:
+        st.metric(
+            "F-statistic",
+            f"{model.fvalue:.2f}"
+        )
+
+    with col4:
+        st.metric(
+            "Observations",
+            f"{int(model.nobs)}"
+        )
+
+    # --------------------------------------------------------
+    # Overall model significance
+    # --------------------------------------------------------
+
+    if model.f_pvalue < 0.05:
+        st.success(
+            f"Overall model is statistically significant "
+            f"(F-test p-value = {model.f_pvalue:.4e})."
+        )
+    else:
+        st.warning(
+            f"Overall model is not statistically significant "
+            f"(F-test p-value = {model.f_pvalue:.4e})."
+        )
+
+    # ========================================================
+    # COEFFICIENT TABLE
+    # ========================================================
+
+    st.markdown("### Coefficient Estimates")
+
+    coefficient_table = pd.DataFrame({
+        "Coefficient": model.params,
+        "Std Error": model.bse,
+        "t-statistic": model.tvalues,
+        "P-value": model.pvalues,
+        "CI Lower": model.conf_int()[0],
+        "CI Upper": model.conf_int()[1]
+    })
+
+    coefficient_table = coefficient_table.round(4)
+
+    st.dataframe(
+        coefficient_table,
         use_container_width=True
     )
 
+    # ========================================================
+    # KEY FINDINGS
+    # ========================================================
 
-    st.info(
-        "As a general rule, VIF values below 5 indicate "
-        "low to moderate multicollinearity."
+    st.markdown("### 🔍 Key Findings")
+
+    st.write(
+        f"""
+        - The regression model explains approximately
+          **{model.rsquared * 100:.1f}%** of the variation in medical charges.
+        - The adjusted R² is **{model.rsquared_adj * 100:.1f}%**.
+        - The overall regression model is statistically significant.
+        - The coefficient estimates show the expected change in medical
+          charges for a one-unit increase in a predictor while holding
+          the other predictors constant.
+        """
     )
 
-
     # ========================================================
-# OLS MODEL SUMMARY
+# OLS REGRESSION RESULTS
 # ========================================================
 
-st.divider()
+st.subheader("OLS Regression Results")
 
-st.subheader(
-    "📄 OLS Regression Results"
-)
-
-st.write(
-    "Multiple linear regression model used to estimate "
-    "medical insurance charges."
-)
-
-
-# ========================================================
-# MODEL PERFORMANCE METRICS
-# ========================================================
-
+# Model summary metrics
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-
-    st.metric(
-        "R²",
-        f"{model.rsquared:.3f}"
-    )
+    st.metric("R²", f"{model.rsquared:.3f}")
 
 with col2:
-
-    st.metric(
-        "Adjusted R²",
-        f"{model.rsquared_adj:.3f}"
-    )
+    st.metric("Adjusted R²", f"{model.rsquared_adj:.3f}")
 
 with col3:
-
-    st.metric(
-        "F-Statistic",
-        f"{model.fvalue:.2f}"
-    )
+    st.metric("F-statistic", f"{model.fvalue:.2f}")
 
 with col4:
-
-    st.metric(
-        "Observations",
-        f"{int(model.nobs)}"
-    )
+    st.metric("Observations", int(model.nobs))
 
 
-# ========================================================
-# OVERALL MODEL SIGNIFICANCE
-# ========================================================
-
-if model.f_pvalue < 0.05:
-
-    st.success(
-        "Overall Model: Significant "
-        "(p < 0.05)"
-    )
-
-else:
-
-    st.info(
-        "Overall Model: Not statistically significant "
-        "(p ≥ 0.05)"
-    )
-
-
-# ========================================================
-# COEFFICIENT TABLE
-# ========================================================
-
-st.subheader(
-    "Regression Coefficients"
-)
-
-
-# Create coefficient table
-
-coef_table = pd.DataFrame({
-
+# Coefficient table
+ols_table = pd.DataFrame({
     "Coefficient": model.params,
-
-    "Std. Error": model.bse,
-
-    "t-Statistic": model.tvalues,
-
+    "Std Error": model.bse,
+    "t-statistic": model.tvalues,
     "P-value": model.pvalues,
-
-    "95% CI Lower": model.conf_int()[0],
-
-    "95% CI Upper": model.conf_int()[1]
-
+    "CI Lower": model.conf_int()[0],
+    "CI Upper": model.conf_int()[1]
 })
 
-
-# Round values for clean display
-
-coef_table = coef_table.round(3)
-
+st.markdown("### Coefficient Estimates")
 
 st.dataframe(
-    coef_table,
+    ols_table.style.format({
+        "Coefficient": "{:.2f}",
+        "Std Error": "{:.2f}",
+        "t-statistic": "{:.2f}",
+        "P-value": "{:.4e}",
+        "CI Lower": "{:.2f}",
+        "CI Upper": "{:.2f}"
+    }),
     use_container_width=True
 )
-
-
-# ========================================================
-# SIGNIFICANCE INTERPRETATION
-# ========================================================
-
-st.subheader(
-    "📌 Key Findings"
-)
-
-
-# Find significant variables
-
-significant_variables = model.pvalues[
-    model.pvalues < 0.05
-].index.tolist()
-
-
-if len(significant_variables) > 0:
-
-    st.write(
-        "The following variables are statistically "
-        "significant at α = 0.05:"
-    )
-
-    for variable in significant_variables:
-
-        if variable == "const":
-            continue
-
-        coefficient = model.params[variable]
-
-        if coefficient > 0:
-
-            st.write(
-                f"• **{variable}** has a positive association "
-                f"with medical charges "
-                f"(coefficient = {coefficient:,.2f})."
-            )
-
-        else:
-
-            st.write(
-                f"• **{variable}** has a negative association "
-                f"with medical charges "
-                f"(coefficient = {coefficient:,.2f})."
-            )
-
-
-# ========================================================
-# MODEL EQUATION
-# ========================================================
-
-with st.expander(
-    "📐 View Regression Model Details"
-):
-
-    st.write(
-        "**Dependent variable:** `charges`"
-    )
-
-    st.write(
-        "**Reference categories:** "
-        "Female, Non-smoker, Northeast"
-    )
-
-    st.write(
-        "Categorical variables were converted into dummy "
-        "variables using `drop_first=True`."
-    )
-
-    st.write(
-        "The model estimates medical charges using age, "
-        "BMI, number of children, sex, smoking status, "
-        "and region."
-    )
